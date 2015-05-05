@@ -2,16 +2,12 @@
 
 (enable-console-print!)
 
-(println "Edits to this text should show up in your developer console.")
-
 ;; define your app data so that it doesn't get over-written on reload
-
-(defonce app-state (atom {:text "Hello world!"}))
 
 (def L (this-as ct (aget ct "L")))
 
 (def santa-cruz {:lat 36.9719 :lon -122.0264})
-;36.9719° N, 122.0264° W
+
 (def map-center (array (:lat santa-cruz) (:lon santa-cruz)))
 
 (def zoom 13)
@@ -20,7 +16,9 @@
     (let [m (-> L (.map "map")
                 (.setView map-center zoom))] m))
 
-(def m (loadMap))
+(defonce m (loadMap))
+
+;(defonce app-state (atom {:text "Hello world!"}))
 
 ; mapbox id
 (def mapbox-id "sampwing.300952ec")
@@ -64,9 +62,13 @@
     (.on "click" on-map-click))
 
 (defn get-distance [{:keys [x y]}]
-  (Math/sqrt (+ (Math/pow (- (:lat x) (:lat y)) 2) (Math/pow (- (:lon x) (:lon y)) 2))))
+  ; get distance in meters between two points
+  (let [x-pnt (-> L (.latLng (array (:lat x) (:lon x))))
+        y-pnt (-> L (.latLng (array (:lat y) (:lon y))))]
+    (-> x-pnt (.distanceTo y-pnt))))
 
 (defn max-distance [{:keys [search-point points]}]
+  ; get the max-distance between a point and the rest
   (loop [distance -1
          x (first points)
          point x
@@ -79,11 +81,18 @@
           (recur distance x (first points) (rest points)))))))
 
 (defn line-midpoint [{:keys [x y]}]
-  (let [lat (/ (* (:lat x) (:lat y)) 2)
-        lon (/ (* (:lon x) (:lon y)) 2)
+  ; find the midpoint between two points
+  (let [lat (/ (+ (:lat x) (:lat y)) 2)
+        lon (/ (+ (:lon x) (:lon y)) 2)
         r (/ (get-distance {:x x :y y}) 2)]
-    (println lat " : " lon " : " r)
     {:center-lat lat :center-lon lon :radius r}))
+
+(defn points-outside [{:keys [circle points]}]
+  ; find points outside of the circle
+  (filter #(let [left-side (Math/sqrt (+ (Math/pow (- (:lat %1) (:center-lat circle)) 2)
+                                         (Math/pow (- (:lon %1) (:center-lon circle)) 2)))
+                 right-side (:radius circle)]
+                        (> left-side right-side)) points))
 
 (defn ritter-algorithm [points]
   (let [y (first points)
@@ -91,12 +100,13 @@
         x (max-distance {:search-point y :points points})
         ; need to remove x from points here
         z (max-distance {:search-point x :points points})]
-    (println (:lat y) (:lon y))
-    (println (str y " : " x " : " z))
     (let [mid (line-midpoint {:x x :y z})]
-      (.addTo (-> L (.circle (array (:center-lat mid) (:center-lon mid)) (:radius mid))) m))
+      (println (str (:center-lat mid)  " : " (:center-lon mid) " : " (:radius mid)))
+      (.addTo (-> L (.circle (array (:center-lat mid) (:center-lon mid)) (:radius mid))) m)
+      (.addTo (-> L (.circle (array (:center-lat mid) (:center-lon mid)) (:radius mid))) m)
+    (println (points-outside {:circle mid :points points})))
     ))
 
 (ritter-algorithm points)
 
-(.addTo (-> L (.circle (array (:lat santa-cruz) (:lon santa-cruz)) 1300)) m)
+;(.addTo (-> L (.circle (array (:lat santa-cruz) (:lon santa-cruz)) 1300)) m)
